@@ -2,19 +2,14 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { NodeData } from '../types';
 import Node from './Node';
 import { ZoomInIcon, ZoomOutIcon, FitToScreenIcon } from './Icons';
+import { useCanvasStore } from '../stores/canvasStore';
 
-interface CanvasProps {
-  nodes: NodeData[];
-  onNodeAction: (sourceNode: NodeData, action: any, prompt?: string) => void;
-  onNodeDrag: (id: string, x: number, y: number) => void;
-}
+interface CanvasProps {}
 
 const NODE_WIDTH = 384; // 96 * 4 (tailwind w-96)
 
-// NEW: Implemented a 4-anchor point system for cleaner connections.
 const calculateSynapsePoints = (from: NodeData, to: NodeData, fromEl: HTMLElement | null, toEl: HTMLElement | null) => {
     if (!fromEl || !toEl) {
-        // Fallback for when elements are not rendered yet
         return { start: { x: from.x, y: from.y }, end: { x: to.x, y: to.y } };
     }
 
@@ -79,7 +74,6 @@ const CanvasControls: React.FC<{
     scale: number;
 }> = ({ zoomIn, zoomOut, resetView, scale }) => {
     return (
-        // REFACTORED: Changed to vertical layout on the right side of the screen to avoid conflict with input bar.
         <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 backdrop-blur-md p-2 rounded-lg border border-cyan-500/30">
             <button onClick={zoomIn} className="p-2 text-cyan-300 hover:text-white hover:bg-cyan-700/50 rounded-md transition-colors"><ZoomInIcon className="w-5 h-5" /></button>
             <span className="text-sm font-semibold text-cyan-300 w-12 text-center">{Math.round(scale * 100)}%</span>
@@ -91,7 +85,8 @@ const CanvasControls: React.FC<{
 };
 
 
-const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeAction, onNodeDrag }) => {
+const Canvas: React.FC<CanvasProps> = () => {
+  const nodes = useCanvasStore((state) => state.nodes);
   const [transform, setTransform] = useState({ x: window.innerWidth / 4, y: window.innerHeight / 8, scale: 0.8 });
   const isPanning = useRef(false);
   const lastMousePosition = useRef({ x: 0, y: 0 });
@@ -99,7 +94,6 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeAction, onNodeDrag }) => {
   const nodeElements = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
-    // Cache node elements for performance
     const newElements: Record<string, HTMLElement | null> = {};
     for (const node of nodes) {
         newElements[node.id] = document.querySelector(`[data-node-id="${node.id}"]`);
@@ -233,7 +227,7 @@ const Canvas: React.FC<CanvasProps> = ({ nodes, onNodeAction, onNodeDrag }) => {
         </svg>
 
         {nodes.map((node) => (
-          <Node key={node.id} node={node} onAction={onNodeAction} onDrag={onNodeDrag} canvasTransform={transform} />
+          <Node key={node.id} node={node} canvasTransform={transform} />
         ))}
       </div>
       <CanvasControls zoomIn={handleZoomIn} zoomOut={handleZoomOut} resetView={handleResetView} scale={transform.scale} />

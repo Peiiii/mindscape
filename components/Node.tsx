@@ -1,12 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import { NodeData, NodeType, NodeAction } from '../types';
 import { AiSparkleIcon, SendIcon, ImageIcon, VideoIcon, DeepenIcon } from './Icons';
+import { usePresenter } from '../context/PresenterContext';
 
 interface NodeProps {
     node: NodeData;
-    onAction: (sourceNode: NodeData, action: NodeAction, prompt?: string) => void;
-    onDrag: (id: string, x: number, y: number) => void;
-    canvasTransform: { x: number; y: number; scale: number; }; // Receive canvas transform for accurate drag calculation
+    canvasTransform: { x: number; y: number; scale: number; };
 }
 
 
@@ -39,14 +38,16 @@ const ActionButton: React.FC<{ onClick: () => void, icon: React.ReactNode, label
     </button>
 );
 
-const NodeActions: React.FC<{ node: NodeData, onAction: NodeProps['onAction'] }> = ({ node, onAction }) => {
+const NodeActions: React.FC<{ node: NodeData }> = ({ node }) => {
+    const presenter = usePresenter();
+
     const handleAction = (action: NodeAction) => {
         let prompt: string | undefined = undefined;
         if(action === NodeAction.GENERATE_IMAGE || action === NodeAction.GENERATE_VIDEO){
             prompt = window.prompt(`请输入用于生成${action === NodeAction.GENERATE_IMAGE ? '图像' : '视频'}的附加描述:`, '') || '根据内容生成';
             if (prompt === null) return;
         }
-        onAction(node, action, prompt);
+        presenter.canvasManager.handleNodeAction(node, action, prompt);
     };
 
     const canGenerateImage = [NodeType.PROMPT, NodeType.AI_RESPONSE].includes(node.type);
@@ -95,8 +96,9 @@ const NodeContent: React.FC<{ node: NodeData }> = ({ node }) => {
     }
 };
 
-const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) => {
+const Node: React.FC<NodeProps> = ({ node, canvasTransform }) => {
     const nodeRef = useRef<HTMLDivElement>(null);
+    const presenter = usePresenter();
     const dragState = useRef({
         isDragging: false,
         startX: 0,
@@ -106,7 +108,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
     });
 
     const handlePointerDown = (e: React.PointerEvent) => {
-        if (e.button !== 0) return; // Only drag with left mouse button
+        if (e.button !== 0) return;
         e.stopPropagation();
         
         dragState.current = {
@@ -135,7 +137,6 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
             const newX = dragState.current.nodeStartX + deltaX;
             const newY = dragState.current.nodeStartY + deltaY;
 
-            // Performance: Directly manipulate transform during drag
             nodeEl.style.transform = `translate(${newX}px, ${newY}px)`;
         };
 
@@ -148,8 +149,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
             const finalX = dragState.current.nodeStartX + deltaX;
             const finalY = dragState.current.nodeStartY + deltaY;
 
-            // Update React state only on drag end
-            onDrag(node.id, finalX, finalY);
+            presenter.canvasManager.handleNodeDrag(node.id, finalX, finalY);
 
             dragState.current.isDragging = false;
             nodeEl.classList.remove('is-dragging');
@@ -163,12 +163,9 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
         
         const handlePointerCancel = (e: PointerEvent) => {
             if (!dragState.current.isDragging) return;
-            // Revert to original position on cancel if needed, or commit
             handlePointerUp(e);
         };
 
-        // We attach listeners to the node itself to handle move/up/cancel events
-        // after a pointerdown has been captured.
         nodeEl.addEventListener('pointermove', handlePointerMove);
         nodeEl.addEventListener('pointerup', handlePointerUp);
         nodeEl.addEventListener('pointercancel', handlePointerCancel);
@@ -178,7 +175,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
             nodeEl.removeEventListener('pointerup', handlePointerUp);
             nodeEl.removeEventListener('pointercancel', handlePointerCancel);
         };
-    }, [node.id, onDrag, canvasTransform]);
+    }, [node.id, canvasTransform, presenter]);
 
 
     const nodeBaseStyle = "absolute w-96 max-w-lg border rounded-xl shadow-lg bg-black/50 backdrop-blur-xl transition-all duration-300 node-enter-active cursor-grab";
@@ -198,7 +195,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
                   <NodeContent node={node} />
                 </div>
             </div>
-            <NodeActions node={node} onAction={onAction} />
+            <NodeActions node={node} />
         </div>
     );
 };

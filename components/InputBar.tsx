@@ -1,20 +1,22 @@
 import React, { useState, useRef } from 'react';
 import { SendIcon, UploadIcon } from './Icons';
+import { usePresenter } from '../context/PresenterContext';
+import { useCanvasStore } from '../stores/canvasStore';
 
-interface InputBarProps {
-  onSubmit: (prompt: string, file: File | null) => void;
-  isLoading: boolean;
-}
 
-const InputBar: React.FC<InputBarProps> = ({ onSubmit, isLoading }) => {
+const InputBar: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const presenter = usePresenter();
+  const isLoading = useCanvasStore((state) => state.isLoading);
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading || (!prompt.trim() && !file)) return;
-    onSubmit(prompt, file);
+    presenter.canvasManager.handleSubmit(prompt, file);
     setPrompt('');
     setFile(null);
     if(fileInputRef.current) {

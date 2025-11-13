@@ -29,13 +29,11 @@ const pollVideoOperation = async (ai: GoogleGenAI, operation: any, onProgress: (
   while (!currentOperation.done) {
     onProgress(progressMessages[messageIndex % progressMessages.length]);
     messageIndex++;
-    // FIX: Increased polling interval to 10 seconds as recommended.
     await new Promise(resolve => setTimeout(resolve, 10000));
     try {
         currentOperation = await ai.operations.getVideosOperation({ operation: currentOperation });
     } catch (e) {
         console.error("Polling video operation failed", e);
-        // FIX: Re-throw original error to allow for specific error handling in the UI.
         throw e;
     }
   }
@@ -45,7 +43,8 @@ const pollVideoOperation = async (ai: GoogleGenAI, operation: any, onProgress: (
 export const processRequest = async (
     prompt: string,
     file: File | null,
-    onNodeUpdate: (node: NodeData) => void,
+    onNodeUpdate: (update: Partial<NodeData> & { id: string }) => void,
+    loadingNodeId: string,
     action?: NodeAction,
 ): Promise<NodeData> => {
     try {
@@ -57,7 +56,7 @@ export const processRequest = async (
         const lowerCasePrompt = prompt.toLowerCase();
         
         if (action === NodeAction.GENERATE_VIDEO || lowerCasePrompt.includes("生成视频") || lowerCasePrompt.includes("创建视频")) {
-            return await generateVideo(prompt, file, onNodeUpdate);
+            return await generateVideo(prompt, file, onNodeUpdate, loadingNodeId);
         } else if (action === NodeAction.GENERATE_IMAGE || lowerCasePrompt.includes("生成图片") || lowerCasePrompt.includes("创建图片") || (file && file.type.startsWith('image/'))) {
             return await generateImage(prompt, file);
         } else {
@@ -66,7 +65,6 @@ export const processRequest = async (
 
     } catch (error: any) {
         console.error("Gemini Service Error:", error);
-        // FIX: Re-throw error so it can be handled by the component.
         throw error;
     }
 };
@@ -89,7 +87,7 @@ const generateText = async (prompt: string, action?: NodeAction): Promise<NodeDa
         id: Date.now().toString(),
         type: 'AI_RESPONSE' as any,
         content: response.text,
-        x: 0, y: 0, // Position will be set in App.tsx
+        x: 0, y: 0, // Position will be set by the manager
     };
 };
 
@@ -126,7 +124,8 @@ const generateImage = async (prompt: string, file: File | null): Promise<NodeDat
 const generateVideo = async (
     prompt: string,
     file: File | null,
-    onNodeUpdate: (node: NodeData) => void
+    onNodeUpdate: (update: Partial<NodeData> & { id: string }) => void,
+    loadingNodeId: string
 ): Promise<NodeData> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     const videoGenerationPayload: any = {
@@ -151,14 +150,10 @@ const generateVideo = async (
 
     let operation = await ai.models.generateVideos(videoGenerationPayload);
     
-    const loadingNodeId = Date.now().toString();
-
     const onProgress = (message: string) => {
         onNodeUpdate({
             id: loadingNodeId,
-            type: 'LOADING' as any,
             content: message,
-            x: 0, y: 0, // Position will be set in App.tsx
         });
     };
     
