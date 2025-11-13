@@ -117,6 +117,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
             nodeStartY: node.y,
         };
         
+        nodeRef.current!.classList.add('is-dragging');
         nodeRef.current!.style.cursor = 'grabbing';
         nodeRef.current!.setPointerCapture(e.pointerId);
     };
@@ -151,6 +152,7 @@ const Node: React.FC<NodeProps> = ({ node, onAction, onDrag, canvasTransform }) 
             onDrag(node.id, finalX, finalY);
 
             dragState.current.isDragging = false;
+            nodeEl.classList.remove('is-dragging');
             nodeEl.style.cursor = 'grab';
             try {
                 nodeEl.releasePointerCapture(e.pointerId);
