@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mindscape: The Neural Canvas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Rajdhani', sans-serif;
+        overscroll-behavior: none;
+      }
+      .neural-canvas-bg {
+        background-color: #000010;
+        background-image: 
+          radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 40px),
+          radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 30px),
+          radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 40px),
+          radial-gradient(rgba(255,255,255,.4), rgba(255,255,255,.1) 2px, transparent 30px);
+        background-size: 550px 550px, 350px 350px, 250px 250px, 150px 150px; 
+        background-position: 0 0, 40px 60px, 130px 270px, 70px 100px;
+        animation: glow 15s linear infinite;
+      }
+       @keyframes glow {
+        0% { background-position: 0 0, 40px 60px, 130px 270px, 70px 100px; }
+        100% { background-position: 550px 550px, 390px 410px, 380px 520px, 220px 250px; }
+      }
+      .node-enter {
+        opacity: 0;
+        transform: scale(0.8);
+      }
+      .node-enter-active {
+        opacity: 1;
+        transform: scale(1);
+        transition: opacity 300ms, transform 300ms;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
