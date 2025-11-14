@@ -177,9 +177,16 @@ const Node: React.FC<NodeProps> = ({ node, canvasTransform }) => {
         };
     }, [node.id, canvasTransform, presenter]);
 
+    const connectorPositions = {
+        top: { top: '0', left: '50%', transform: 'translate(-50%, -50%)' },
+        bottom: { bottom: '0', left: '50%', transform: 'translate(-50%, 50%)' },
+        left: { top: '50%', left: '0', transform: 'translate(-50%, -50%)' },
+        right: { top: '50%', right: '0', transform: 'translate(50%, -50%)' },
+    };
 
-    const nodeBaseStyle = "absolute w-96 max-w-lg border rounded-xl shadow-lg bg-black/50 backdrop-blur-xl transition-all duration-300 node-enter-active cursor-grab";
+    const nodeBaseStyle = "absolute w-96 max-w-lg border rounded-xl shadow-lg bg-black/50 backdrop-blur-xl transition-all duration-300 node-enter-active cursor-grab group";
     const borderColor = node.type === NodeType.PROMPT ? "border-cyan-500/30" : "border-purple-500/30";
+    const canHaveConnectors = ![NodeType.LOADING, NodeType.ERROR, NodeType.SYSTEM_MESSAGE].includes(node.type);
 
     return (
         <div 
@@ -196,6 +203,22 @@ const Node: React.FC<NodeProps> = ({ node, canvasTransform }) => {
                 </div>
             </div>
             <NodeActions node={node} />
+
+            {canHaveConnectors && Object.entries(connectorPositions).map(([direction, style]) => (
+                <button
+                    key={direction}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                    }}
+                    className="absolute w-6 h-6 bg-cyan-800/80 rounded-full flex items-center justify-center cursor-default opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                    style={style}
+                    aria-label={`Add node to the ${direction}`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6" />
+                    </svg>
+                </button>
+            ))}
         </div>
     );
 };

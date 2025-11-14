@@ -8,65 +8,6 @@ interface CanvasProps {}
 
 const NODE_WIDTH = 384; // 96 * 4 (tailwind w-96)
 
-const calculateSynapsePoints = (from: NodeData, to: NodeData, fromEl: HTMLElement | null, toEl: HTMLElement | null) => {
-    if (!fromEl || !toEl) {
-        return { start: { x: from.x, y: from.y }, end: { x: to.x, y: to.y } };
-    }
-
-    const fromHeight = fromEl.clientHeight;
-    const toHeight = toEl.clientHeight;
-
-    const fromAnchors = [
-        { x: from.x + NODE_WIDTH / 2, y: from.y }, // Top
-        { x: from.x + NODE_WIDTH / 2, y: from.y + fromHeight }, // Bottom
-        { x: from.x, y: from.y + fromHeight / 2 }, // Left
-        { x: from.x + NODE_WIDTH, y: from.y + fromHeight / 2 }, // Right
-    ];
-
-    const toAnchors = [
-        { x: to.x + NODE_WIDTH / 2, y: to.y }, // Top
-        { x: to.x + NODE_WIDTH / 2, y: to.y + toHeight }, // Bottom
-        { x: to.x, y: to.y + toHeight / 2 }, // Left
-        { x: to.x + NODE_WIDTH, y: to.y + toHeight / 2 }, // Right
-    ];
-
-    let minDistance = Infinity;
-    let bestPair = { start: fromAnchors[0], end: toAnchors[0] };
-
-    for (const fromPoint of fromAnchors) {
-        for (const toPoint of toAnchors) {
-            const distance = Math.sqrt(Math.pow(fromPoint.x - toPoint.x, 2) + Math.pow(fromPoint.y - toPoint.y, 2));
-            if (distance < minDistance) {
-                minDistance = distance;
-                bestPair = { start: fromPoint, end: toPoint };
-            }
-        }
-    }
-    return bestPair;
-};
-
-
-const Synapse: React.FC<{ from: NodeData, to: NodeData, fromEl: HTMLElement | null, toEl: HTMLElement | null }> = ({ from, to, fromEl, toEl }) => {
-    const { start, end } = calculateSynapsePoints(from, to, fromEl, toEl);
-
-    const controlPointX1 = start.x + (end.x - start.x) * 0.3;
-    const controlPointY1 = start.y;
-    const controlPointX2 = end.x - (end.x - start.x) * 0.3;
-    const controlPointY2 = end.y;
-
-    const pathData = `M ${start.x} ${start.y} C ${controlPointX1} ${controlPointY1}, ${controlPointX2} ${controlPointY2}, ${end.x} ${end.y}`;
-
-    return (
-        <path
-            d={pathData}
-            stroke="url(#synapse-gradient)"
-            strokeWidth="2"
-            fill="none"
-            className="synapse-path"
-        />
-    );
-};
-
 const CanvasControls: React.FC<{
     zoomIn: () => void;
     zoomOut: () => void;
@@ -88,10 +29,9 @@ const CanvasControls: React.FC<{
 const Canvas: React.FC<CanvasProps> = () => {
   const nodes = useCanvasStore((state) => state.nodes);
   const [transform, setTransform] = useState({ x: window.innerWidth / 4, y: window.innerHeight / 8, scale: 0.8 });
-  const isPanning = useRef(false);
-  const lastMousePosition = useRef({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
   const nodeElements = useRef<Record<string, HTMLElement | null>>({});
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
     const newElements: Record<string, HTMLElement | null> = {};
@@ -100,34 +40,75 @@ const Canvas: React.FC<CanvasProps> = () => {
     }
     nodeElements.current = newElements;
   }, [nodes]);
-
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target !== canvasRef.current || e.button !== 0) return;
-    isPanning.current = true;
-    lastMousePosition.current = { x: e.clientX, y: e.clientY };
-    canvasRef.current!.style.cursor = 'grabbing';
+  
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+      if (e.target !== canvasRef.current) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      canvasRef.current?.setPointerCapture(e.pointerId);
+      if (pointers.current.size === 1) {
+          canvasRef.current!.style.cursor = 'grabbing';
+      }
   }, []);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
-    const dx = e.clientX - lastMousePosition.current.x;
-    const dy = e.clientY - lastMousePosition.current.y;
-    setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-    lastMousePosition.current = { x: e.clientX, y: e.clientY };
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+      if (!pointers.current.has(e.pointerId)) return;
+      
+      // FIX: Explicitly typing oldPointers prevents a TypeScript inference issue where
+      // creating a new Map from an existing one was losing type information.
+      const oldPointers: Map<number, { x: number; y: number }> = new Map(pointers.current);
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // FIX: Explicitly type pArr and oldPArr to prevent TypeScript from inferring them as unknown[], which causes property access errors.
+      const pArr: { x: number; y: number }[] = Array.from(pointers.current.values());
+      const oldPArr: { x: number; y: number }[] = Array.from(oldPointers.values());
+
+      if (pArr.length === 1) { // Panning
+          const oldPos = oldPointers.get(e.pointerId)!;
+          const dx = e.clientX - oldPos.x;
+          const dy = e.clientY - oldPos.y;
+          setTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      } else if (pArr.length === 2 && oldPArr.length === 2) { // Pinching
+          const oldDist = Math.hypot(oldPArr[0].x - oldPArr[1].x, oldPArr[0].y - oldPArr[1].y);
+          const newDist = Math.hypot(pArr[0].x - pArr[1].x, pArr[0].y - pArr[1].y);
+          const oldMidpoint = { x: (oldPArr[0].x + oldPArr[1].x) / 2, y: (oldPArr[0].y + oldPArr[1].y) / 2 };
+          const newMidpoint = { x: (pArr[0].x + pArr[1].x) / 2, y: (pArr[0].y + pArr[1].y) / 2 };
+
+          if (oldDist === 0) return;
+          const scaleFactor = newDist / oldDist;
+          
+          const panDx = newMidpoint.x - oldMidpoint.x;
+          const panDy = newMidpoint.y - oldMidpoint.y;
+
+          setTransform(prev => {
+              const newScale = Math.min(Math.max(0.1, prev.scale * scaleFactor), 3);
+              const newX = newMidpoint.x - (newMidpoint.x - (prev.x + panDx)) * scaleFactor;
+              const newY = newMidpoint.y - (newMidpoint.y - (prev.y + panDy)) * scaleFactor;
+              return { scale: newScale, x: newX, y: newY };
+          });
+      }
   }, []);
 
-  const handleMouseUp = useCallback(() => {
-    isPanning.current = false;
-    if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+      pointers.current.delete(e.pointerId);
+      canvasRef.current?.releasePointerCapture(e.pointerId);
+      if (pointers.current.size < 1) {
+          canvasRef.current!.style.cursor = 'grab';
+      }
   }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const scaleAmount = -e.deltaY * 0.001;
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
     setTransform(prev => {
         const newScale = Math.min(Math.max(0.1, prev.scale + scaleAmount), 3);
-        return { ...prev, scale: newScale };
+        const newX = mouseX - (mouseX - prev.x) * (newScale / prev.scale);
+        const newY = mouseY - (mouseY - prev.y) * (newScale / prev.scale);
+        return { scale: newScale, x: newX, y: newY };
     });
   }, []);
 
@@ -173,59 +154,21 @@ const Canvas: React.FC<CanvasProps> = () => {
     setTransform({ x: newX, y: newY, scale });
   }, [nodes]);
 
-  
-  const nodesById = React.useMemo(() => 
-    nodes.reduce((acc, node) => {
-        acc[node.id] = node;
-        return acc;
-    }, {} as Record<string, NodeData>), 
-  [nodes]);
-
   return (
     <div
       ref={canvasRef}
       className="flex-1 w-full h-full overflow-hidden relative cursor-grab neural-canvas-bg"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onWheel={handleWheel}
+      style={{ touchAction: 'none' }}
     >
       <div
         className="absolute top-0 left-0"
         style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, transformOrigin: 'top left' }}
       >
-        <svg className="absolute top-0 left-0" style={{ width: '100vw', height: '100vh', pointerEvents: 'none', transform: `scale(${1/transform.scale}) translate(${-transform.x}px, ${-transform.y}px)` }}>
-           <defs>
-                <linearGradient id="synapse-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" style={{stopColor: 'rgb(107, 33, 168, 0.7)'}} />
-                    <stop offset="100%" style={{stopColor: 'rgb(8, 145, 178, 0.7)'}} />
-                </linearGradient>
-            </defs>
-            <style>{`
-                .synapse-path {
-                    stroke-dasharray: 1000;
-                    stroke-dashoffset: 1000;
-                    animation: dash 5s linear forwards infinite;
-                }
-                @keyframes dash {
-                    to {
-                        stroke-dashoffset: 0;
-                    }
-                }
-            `}</style>
-          <g style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
-            {nodes.map(node => {
-                if (node.parentId && nodesById[node.parentId]) {
-                    const fromEl = nodeElements.current[node.parentId];
-                    const toEl = nodeElements.current[node.id];
-                    return <Synapse key={`${node.parentId}-${node.id}`} from={nodesById[node.parentId]} to={node} fromEl={fromEl} toEl={toEl} />;
-                }
-                return null;
-            })}
-          </g>
-        </svg>
-
         {nodes.map((node) => (
           <Node key={node.id} node={node} canvasTransform={transform} />
         ))}
